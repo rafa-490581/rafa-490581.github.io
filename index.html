@@ -19,26 +19,61 @@ button{font:inherit;font-weight:600;background:var(--p);color:#fff;border:0;bord
 </main>
 <script>window.__OFFLINE=true;
 (function(){
-const mem={orders:{},days:{}},subs=[];let idb=null,mode='mem';
+const GAS="var TOKEN='__TOKEN__';\nfunction sh_(){var ss=SpreadsheetApp.getActive(),s=ss.getSheetByName('orders');\nif(!s){s=ss.insertSheet('orders');s.appendRow(['id','sv','u','hapus','json','tanggal','nama','no_hp','alamat','kecamatan','kota','isi_paket','bayar','nominal','berat','kurir','status','cs','repeat']);s.getRange('H:H').setNumberFormat('@')}\nreturn s}\nfunction out_(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON)}\nfunction row_(it,sv){var d=it.data||{};\nreturn [it.id,sv,it.u,it.del?1:0,JSON.stringify(d),d.ts?new Date(d.ts):'',d.nama||'',String(d.telp||''),d.alamat||'',d.kec||'',d.kota||'',d.isi||'',d.nama?(d.cod=='1'?'COD':'Transfer'):'',d.amt||'',d.berat||'',d.kurir||'',d.st||'',d.cs||'',d.rep?'Ya':'']}\nfunction doPost(e){var b=JSON.parse(e.postData.contents);\nif(b.token!==TOKEN)return out_({err:'token salah'});\nvar L=LockService.getScriptLock();L.waitLock(30000);\ntry{var s=sh_(),n=s.getLastRow(),ids={},add=[],sv=Date.now();\nif(n>1)s.getRange(2,1,n-1,3).getValues().forEach(function(r,i){ids[r[0]]={row:i+2,u:+r[2]}});\nb.items.forEach(function(it){var o=ids[it.id];if(o&&(it.del?o.u>it.u:o.u>=it.u))return;var r=row_(it,sv);\nif(o)s.getRange(o.row,1,1,r.length).setValues([r]);else add.push(r)});\nif(add.length)s.getRange(s.getLastRow()+1,1,add.length,add[0].length).setValues(add);\nreturn out_({ok:b.items.length})}finally{L.releaseLock()}}\nfunction doGet(e){if(e.parameter.token!==TOKEN)return out_({err:'token salah'});\nvar since=+e.parameter.since||0,s=sh_(),n=s.getLastRow(),res=[];\nif(n>1)s.getRange(2,1,n-1,5).getValues().forEach(function(r){if(+r[1]>since)res.push({id:r[0],sv:+r[1],u:+r[2],del:+r[3],data:r[4]?JSON.parse(r[4]):{}})});\nres.sort(function(a,b){return a.sv-b.sv});\nvar cut=res.slice(0,300);\nif(res.length>300){var last=cut[299].sv;cut=res.filter(function(x){return x.sv<=last})}\nreturn out_({items:cut,next:cut.length?cut[cut.length-1].sv:since,more:cut.length<res.length})}\n";
+const mem={orders:{},days:{},tomb:{}},subs=[];let idb=null,mode='mem';
+const LS=k=>{try{return localStorage.getItem(k)}catch(e){return null}},SS=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const open=()=>new Promise((res,rej)=>{try{const r=indexedDB.open('everpro_offline',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});
 const kvAll=()=>new Promise((res,rej)=>{const s=idb.transaction('kv').objectStore('kv'),k=s.getAllKeys(),v=s.getAll();v.onsuccess=()=>res(k.result.map((x,i)=>[x,v.result[i]]));v.onerror=()=>rej(v.error)});
 const kvPut=(k,v)=>new Promise((res,rej)=>{const r=idb.transaction('kv','readwrite').objectStore('kv').put(v,k);r.onsuccess=res;r.onerror=()=>rej(r.error)});
 const kvDel=k=>new Promise((res,rej)=>{const r=idb.transaction('kv','readwrite').objectStore('kv').delete(k);r.onsuccess=res;r.onerror=()=>rej(r.error)});
 const ready=(async()=>{try{idb=await open();for(const[k,v]of await kvAll()){const[c,i]=k.split('/');if(mem[c])mem[c][i]=v}mode='idb'}
-catch(e){try{const s=localStorage.getItem('everpro');if(s){const o=JSON.parse(s);mem.orders=o.orders||{};mem.days=o.days||{}}localStorage.setItem('everpro_t','1');mode='ls'}catch(e2){mode='mem'}}
+catch(e){try{const s=localStorage.getItem('everpro');if(s){const o=JSON.parse(s);mem.orders=o.orders||{};mem.days=o.days||{};mem.tomb=o.tomb||{}}localStorage.setItem('everpro_t','1');mode='ls'}catch(e2){mode='mem'}}
 try{navigator.storage.persist()}catch(e){}
-if(typeof document!=='undefined'){const t=document.getElementById('stt');if(t){t.textContent=mode=='mem'?'PERINGATAN: penyimpanan di HP ini tidak tersedia, data hilang saat halaman ditutup. Simpan file ini ke HP lalu buka dari pengelola file, dan rutin tap Cadangkan data.':'Mode offline: order tersimpan di HP ini. Rutin tap Cadangkan data (.json) sebagai cadangan.';if(mode=='mem')t.style.color='var(--w)'}}})();
+if(typeof document!=='undefined'){const t=document.getElementById('stt');if(t){t.textContent=mode=='mem'?'PERINGATAN: penyimpanan di HP ini tidak tersedia, data hilang saat halaman ditutup. Pasang aplikasinya lewat alamat https lalu rutin tap Cadangkan data.':'Mode offline: order tersimpan di HP ini. Rutin tap Cadangkan data (.json) sebagai cadangan.';if(mode=='mem')t.style.color='var(--w)'}}})();
 const store=(c,id,d)=>{if(mode=='idb')return d===null?kvDel(c+'/'+id):kvPut(c+'/'+id,d);if(mode=='ls'){try{localStorage.setItem('everpro',JSON.stringify(mem))}catch(e){}}return Promise.resolve()};
 const notify=c=>subs.filter(s=>s.c==c).forEach(s=>s.f());
-async function put(c,id,d){await ready;mem[c][id]=d;await store(c,id,d);notify(c)}
+let tmr=0;const cfg=()=>{try{return JSON.parse(LS('everpro_sync')||'null')}catch(e){return null}};
+const sched=()=>{if(cfg()){clearTimeout(tmr);tmr=setTimeout(sync,4000)}};
+async function put(c,id,d,raw){await ready;if(c=='orders'&&!raw)d._u=Date.now();mem[c][id]=d;await store(c,id,d);if(!raw){notify(c);if(c=='orders')sched()}}
 function Q(c,f,ob,lm){return{where:(a,o,v)=>Q(c,[...f,[a,o,v]],ob,lm),orderBy:(a,d)=>Q(c,f,[a,d||'asc'],lm),limit:n=>Q(c,f,ob,n),
 run(){let a=Object.entries(mem[c]).map(([id,d])=>({id,d}));for(const[x,o,v]of f)a=a.filter(r=>{const y=r.d[x];return o=='>='?y>=v:o=='<'?y<v:o=='>'?y>v:o=='<='?y<=v:y===v});
 if(ob){const[x,d]=ob;a.sort((p,q)=>(p.d[x]>q.d[x]?1:p.d[x]<q.d[x]?-1:0)*(d=='desc'?-1:1))}return a.slice(0,lm).map(r=>({id:r.id,data:()=>r.d}))},
 async get(){await ready;return{docs:this.run()}},
 onSnapshot(cb){const s={c,f:()=>cb({docs:this.run()})};subs.push(s);ready.then(s.f);return()=>{const i=subs.indexOf(s);if(i>-1)subs.splice(i,1)}}}}
-const DB={collection:c=>({...Q(c,[],null,1e9),doc:id=>({set:d=>put(c,id,JSON.parse(JSON.stringify(d))),update:async p=>{await ready;await put(c,id,{...mem[c][id],...p})},delete:async()=>{await ready;delete mem[c][id];await store(c,id,null);notify(c)}})})};
+const DB={collection:c=>({...Q(c,[],null,1e9),doc:id=>({set:d=>put(c,id,JSON.parse(JSON.stringify(d))),update:async p=>{await ready;await put(c,id,{...mem[c][id],...p})},
+delete:async()=>{await ready;delete mem[c][id];await store(c,id,null);if(c=='orders'){mem.tomb[id]=Date.now();await store('tomb',id,mem.tomb[id]);sched()}notify(c)}})})};
 const DLS={save:async({filename,data})=>{const u=URL.createObjectURL(data),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}};
 window.claude={use:async n=>n=='db'?DB:n=='downloads'?DLS:null};
+/* sinkronisasi ke Google Sheet (Apps Script) */
+const st=t=>{if(typeof document!=='undefined'){const e=document.getElementById('sst');if(e)e.textContent=t}};
+const dayOf=ts=>{const d=new Date(ts),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())};
+async function rpc(c,opt,qs){const r=await fetch(qs?c.url+'?token='+encodeURIComponent(c.token)+'&since='+qs:c.url,opt);let j;try{j=await r.json()}catch(e){throw new Error('respons tidak valid, cek akses web app = Anyone')}if(j.err)throw new Error(j.err);return j}
+let busy=false;
+async function sync(){const c=cfg();if(!c||busy||(typeof navigator!=='undefined'&&navigator.onLine===false))return;busy=true;st('Menyinkronkan...');
+try{await ready;const lp=+LS('everpro_lp')||0,t0=Date.now(),items=[];
+for(const[id,d]of Object.entries(mem.orders))if((d._u||1)>=lp)items.push({id,u:d._u||1,del:0,data:d});
+for(const[id,u]of Object.entries(mem.tomb))if(u>=lp)items.push({id,u,del:1,data:{}});
+for(let i=0;i<items.length;i+=40)await rpc(c,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({token:c.token,items:items.slice(i,i+40)})});
+SS('everpro_lp',String(t0));
+for(const id of Object.keys(mem.tomb))if(mem.tomb[id]<=t0){delete mem.tomb[id];await store('tomb',id,null)}
+let since=+LS('everpro_ls')||0,n=0;const days=new Set();
+for(let pg=0;pg<60;pg++){const r=await rpc(c,{},String(since));
+for(const it of r.items){const loc=mem.orders[it.id],lu=loc?(loc._u||1):0,tu=mem.tomb[it.id]||0;
+if(it.del){if(loc&&lu<=it.u){days.add(dayOf(loc.ts));delete mem.orders[it.id];await store('orders',it.id,null);n++}}
+else if(it.u>lu&&it.u>tu){await put('orders',it.id,{...it.data,_u:it.u},true);days.add(dayOf(it.data.ts));if(loc)days.add(dayOf(loc.ts));n++}}
+since=r.next||since;SS('everpro_ls',String(since));if(!r.more)break}
+if(n){notify('orders');if(typeof window!=='undefined'&&window.dispatchEvent)window.dispatchEvent(new CustomEvent('everpro-synced',{detail:[...days]}))}
+st('Sinkron terakhir '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+' · terkirim '+items.length+', diterima '+n)}
+catch(e){st('Gagal sinkron: '+(e.message||e)+' (dicoba lagi nanti)')}finally{busy=false}}
+window.__sync=sync;
+ready.then(()=>{if(cfg()){setTimeout(sync,2500)}if(typeof setInterval!=='undefined')setInterval(()=>{if(typeof document==='undefined'||!document.hidden)sync()},120000);if(typeof addEventListener!=='undefined')addEventListener('online',()=>setTimeout(sync,1500))});
+if(typeof document!=='undefined'){const o=document.getElementById('op');if(o){
+o.insertAdjacentHTML('afterend','<button id="sy" style="background:none;color:var(--p);border:1px solid var(--b)">Sinkronisasi Google Sheet</button><div id="sp" class="card" hidden><b>Sinkronisasi ke Google Sheet</b><p style="font-size:12px">Order di HP ini dikirim ke Google Sheet Anda saat ada internet, dan order dari HP lain diterima. Tap Buat token, lalu Salin kode, dan ikuti panduan dari saya.</p><label>Token rahasia<input id="syt"></label><button id="syg" style="background:none;color:var(--p);border:1px solid var(--b)">Buat token baru</button><button id="syc">Salin kode Apps Script</button><textarea id="sgas" rows="6" hidden></textarea><label>URL web app (dari Apps Script)<input id="syu" placeholder="https://script.google.com/macros/s/.../exec"></label><button id="sys">Simpan dan sinkronkan</button><p id="sst" style="font-size:12px"></p></div>');
+const $=i=>document.getElementById(i),c0=cfg();if(c0){$('syu').value=c0.url;$('syt').value=c0.token;st('Sinkronisasi aktif.')}else st('Belum diatur.');
+$('sy').onclick=()=>{$('sp').hidden=!$('sp').hidden};
+$('syg').onclick=()=>{const a=new Uint8Array(12);crypto.getRandomValues(a);$('syt').value=Array.from(a,x=>x.toString(36).padStart(2,'0')).join('')};
+$('syc').onclick=async()=>{const t=$('syt').value.trim();if(!t){st('Buat token dulu.');return}const code=GAS.replace('__TOKEN__',t);try{await navigator.clipboard.writeText(code);st('Kode tersalin. Tempel di Apps Script.')}catch(e){$('sgas').hidden=false;$('sgas').value=code;$('sgas').select();st('Salin manual isi kotak di bawah.')}};
+$('sys').onclick=()=>{const u=$('syu').value.trim(),t=$('syt').value.trim();if(!/^https:\/\/script\.google\.com\//.test(u)||!t){st('Isi token dan URL web app (https://script.google.com/...).');return}SS('everpro_sync',JSON.stringify({url:u,token:t}));SS('everpro_ls','0');SS('everpro_lp','0');sync()}}}
 /* penulis xlsx mini (tanpa internet) */
 const col=n=>{let s='';n++;while(n){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s};
 const ex=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'');
@@ -193,6 +228,7 @@ $('imf').onchange=async e=>{const f=e.target.files[0];if(!f||!DB)return;$('hs').
 for(const x of a){await DB.collection('orders').doc(x.id).set(x.data);ds.add(dayId(x.data.ts))}for(const d of ds)await recount(d);$('hs').textContent=a.length+' order diimpor.'}catch(err){$('hs').textContent='Gagal impor: '+(err.message||err)}e.target.value=''};
 $('ex').hidden=!window.__OFFLINE;
 $('ex').onclick=async()=>{try{const a=await dbq(DB.collection('orders').orderBy('ts','desc').limit(1e9)),d=await claude.use('downloads');await d.save({filename:'Cadangan_Order_'+dayId(Date.now())+'.json',data:new Blob([JSON.stringify({orders:a.map(({id,...data})=>({id,data}))})],{type:'application/json'})})}catch(e){$('hs').textContent='Gagal mencadangkan: '+(e.message||e)}};
+window.addEventListener('everpro-synced',async e=>{while(!DB)await new Promise(r=>setTimeout(r,300));for(const d of e.detail)await recount(d);hist()});
 if(window.claude)claude.use('db').then(db=>{if(!db){$('hs').textContent='Penyimpanan tidak tersedia di tampilan ini.';return}DB=db;
 DB.collection('days').orderBy('d','desc').limit(1000).onSnapshot(s=>{DAYS=s.docs.map(d=>d.data());hist();if(!DAYS.length)heal()},e=>{$('hs').textContent='Gagal memuat: '+(e&&e.message||'')})});
 async function run(SRC){$('msg').textContent='';try{let sv=false;if(!SRC)sv=await persist();
